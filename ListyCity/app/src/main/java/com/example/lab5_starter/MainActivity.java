@@ -4,7 +4,9 @@ import android.os.Bundle;
 import android.util.Log;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ListView;
+import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
@@ -25,6 +27,7 @@ public class MainActivity extends AppCompatActivity implements CityDialogFragmen
 
     private Button addCityButton;
     private Button deleteCityButton;
+    private EditText deleteCityEditText;
     private ListView cityListView;
 
     private ArrayList<City> cityArrayList;
@@ -32,7 +35,9 @@ public class MainActivity extends AppCompatActivity implements CityDialogFragmen
 
     private FirebaseFirestore db;
     private CollectionReference citiesRef;
-    private City selectedCity = null;
+
+    private boolean deleteMode = false;
+
 
 
     @Override
@@ -53,21 +58,23 @@ public class MainActivity extends AppCompatActivity implements CityDialogFragmen
             if (error != null) {
                 Log.e("Firestore", error.toString());
             }
-            if (value != null && !value.isEmpty()) {
-                cityArrayList.clear();
+            cityArrayList.clear();
+            if (value != null) {
                 for (QueryDocumentSnapshot snapshot : value) {
                     String name = snapshot.getString("name");
                     String province = snapshot.getString("province");
 
                     cityArrayList.add(new City(name, province));
                 }
-                cityArrayAdapter.notifyDataSetChanged();
             }
+
+            cityArrayAdapter.notifyDataSetChanged();
         });
 
         // Set views
         addCityButton = findViewById(R.id.buttonAddCity);
         deleteCityButton = findViewById(R.id.buttonDeleteCity);
+        deleteCityEditText = findViewById(R.id.editTextDeleteCity);
         cityListView = findViewById(R.id.listviewCities);
 
         // create city array
@@ -75,7 +82,7 @@ public class MainActivity extends AppCompatActivity implements CityDialogFragmen
         cityArrayAdapter = new CityArrayAdapter(this, cityArrayList);
         cityListView.setAdapter(cityArrayAdapter);
 
-        addDummyData();
+//        addDummyData();
 
         // set listeners
         addCityButton.setOnClickListener(view -> {
@@ -83,22 +90,42 @@ public class MainActivity extends AppCompatActivity implements CityDialogFragmen
             cityDialogFragment.show(getSupportFragmentManager(),"Add City");
         });
 
+
+
         cityListView.setOnItemClickListener((adapterView, view, i, l) -> {
             City city = cityArrayAdapter.getItem(i);
+            if (deleteMode) {
+                citiesRef
+                        .document(city.getName())
+                        .delete()
+                        .addOnSuccessListener(aVoid ->
+                                Log.d("Firestore", "City deleted"));
+
+                deleteMode = false;
+                return;
+            }
+
             CityDialogFragment cityDialogFragment = CityDialogFragment.newInstance(city);
             cityDialogFragment.show(getSupportFragmentManager(),"City Details");
         });
 
-        deleteCityButton.setOnClickListener(view -> {
-            if (selectedCity == null) return;
+        deleteCityButton.setOnClickListener(v -> {
+            String cityName = deleteCityEditText.getText().toString().trim();
 
-            citiesRef
-                    .document(selectedCity.getName())
+            if (cityName.isEmpty()) {
+                Toast.makeText(this, "Enter a city name", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            citiesRef.document(cityName)
                     .delete()
-                    .addOnSuccessListener(aVoid ->
-                            Log.d("Firestore", "City deleted"));
-
-            selectedCity = null;
+                    .addOnSuccessListener(aVoid -> {
+                        Toast.makeText(this, "City deleted", Toast.LENGTH_SHORT).show();
+                        deleteCityEditText.setText("");
+                    })
+                    .addOnFailureListener(e ->
+                            Toast.makeText(this, "City not found", Toast.LENGTH_SHORT).show()
+                    );
         });
 
     }
